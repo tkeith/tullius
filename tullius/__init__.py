@@ -18,13 +18,13 @@ class Task(object):
     priority = 5
     timeout = 60
 
-    def __init__(input=None):
+    def __init__(self, input=None):
         self.input = input
 
-    def run():
+    def run(self):
         return None
 
-    def failed():
+    def failed(self):
         return None
 
 def task_for_db(task):
