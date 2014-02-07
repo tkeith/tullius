@@ -92,4 +92,4 @@ def handle_pending_tasks():
             return result
         result = True
         utils.mongo_retry(lambda: db.tasks.insert(db_task['next_task']), True)
-        utils.mongo_retry(lambda: db.tasks.update({'_id': db_task['id']}, {'$set': {'status': db_task['next_status']}}))
+        utils.mongo_retry(lambda: db.tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}}))
