@@ -53,7 +53,7 @@ def process_tasks(min_priority, max_priority):
 
         task = task_from_db(db_task)
         id = db_task['_id']
-        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'status': 'processing', 'dead_time': datetime.now() + timedelta(seconds=task.timeout + 60)}))
+        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'processing', 'dead_time': datetime.now() + timedelta(seconds=task.timeout + 60)}}))
         if res['n'] == 0:
             continue
 
