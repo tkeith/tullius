@@ -10,6 +10,7 @@ def ensure_indexes():
     db.tasks.ensure_index('priority')
     db.tasks.ensure_index('status')
     db.tasks.ensure_index('dead_time')
+    db.tasks.ensure_index('queue_time')
 
 utils.mongo_retry(ensure_indexes)
 
@@ -29,12 +30,12 @@ class Task(object):
 
 def task_for_db(task):
     id = bson.ObjectId()
-    return {'_id': id, 'status': 'new', 'priority': task.priority, 'obj': pickle.dumps(task)}
+    return {'_id': id, queue_time: datetime.now(), 'status': 'new', 'priority': task.priority, 'obj': pickle.dumps(task)}
 
 def task_from_db(db_task):
     return pickle.loads(db_task['obj'])
 
-def register(task):
+def queue(task):
     utils.mongo_retry(lambda: db.tasks.insert(task_for_db(task)), True)
 
 def done_task(task, id, status, next_task):
@@ -46,7 +47,7 @@ def done_task(task, id, status, next_task):
 
 def process_tasks(min_priority, max_priority):
     while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING)]))
+        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('queue_time': pymongo.ASCENDING)]))
         if db_task is None:
             time.sleep(1)
             continue
