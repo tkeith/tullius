@@ -69,7 +69,7 @@ def done_task(task, id, status, next_tasks):
     else:
         next_tasks_for_db = [task.for_db() for task in next_tasks]
         update = {'$set': {'status': 'next_tasks_pending', 'next_status': status, 'next_tasks': next_tasks_for_db}}
-    utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'processing'}, update))
+    utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'running'}, update))
 
 def process_tasks(min_priority, max_priority):
     while True:
@@ -80,7 +80,7 @@ def process_tasks(min_priority, max_priority):
 
         task = task_from_db(db_task)
         id = db_task['_id']
-        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'processing', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
+        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
         if res['n'] == 0:
             continue
 
@@ -104,7 +104,7 @@ def process_updates():
 def handle_dead_tasks():
     result = False
     while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'processing', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
+        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'running', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
         if db_task is None:
             return result
         result = True
