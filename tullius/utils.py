@@ -50,3 +50,11 @@ def mongo_retry(function, ignore_dup_key_error=False):
         return retry(function, pymongo.errors.AutoReconnect, backoff=1, timeout=60)
     except pymongo.errors.DuplicateKeyError:
         return None
+
+def ensure_list(x):
+    try:
+        return list(x)
+    except TypeError:
+        if x is None:
+            return []
+        return [x]
