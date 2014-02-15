@@ -12,7 +12,7 @@ import multiprocessing
 def ensure_indexes():
     db.tasks.ensure_index('priority')
     db.tasks.ensure_index('status')
-    db.tasks.ensure_index('dead_time')
+    db.tasks.ensure_index('timeout_time')
     db.tasks.ensure_index('start_after')
 
 utils.mongo_retry(ensure_indexes)
@@ -73,14 +73,14 @@ def done_task(task, id, status, next_tasks):
 
 def process_tasks(min_priority, max_priority):
     while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'start_after': {'$lte': datetime.now()},'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after': pymongo.ASCENDING)]))
+        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after': pymongo.ASCENDING)]))
         if db_task is None:
             time.sleep(1)
             continue
 
         task = task_from_db(db_task)
         id = db_task['_id']
-        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'processing', 'dead_time': datetime.now() + timedelta(seconds=task.timeout + 60)}}))
+        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'processing', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
         if res['n'] == 0:
             continue
 
@@ -104,7 +104,7 @@ def process_updates():
 def handle_dead_tasks():
     result = False
     while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'processing', 'dead_time': {'$lte': datetime.now()}}))
+        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'processing', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
         if db_task is None:
             return result
         result = True
