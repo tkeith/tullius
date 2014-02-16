@@ -73,7 +73,7 @@ def done_task(task, id, status, next_tasks):
 
 def process_tasks(min_priority, max_priority):
     while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after': pymongo.ASCENDING)]))
+        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
         if db_task is None:
             time.sleep(1)
             continue
