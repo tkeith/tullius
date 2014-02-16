@@ -5,7 +5,6 @@ import pymongo
 from datetime import datetime, timedelta
 from . import utils
 import time
-from . import schedule
 import numbers
 import multiprocessing
 
