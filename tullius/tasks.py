@@ -16,7 +16,7 @@ def ensure_indexes():
 
 utils.mongo_retry(ensure_indexes)
 
-class Task(QueueItem):
+class Task(object):
 
     priority = 5
     timeout = 60
@@ -38,7 +38,7 @@ class Task(QueueItem):
     def from_db(db_obj):
         return pickle.loads(db_obj['pickle'])
 
-class ScheduledTask(QueueItem):
+class ScheduledTask(object):
 
     def __init__(self, task, time):
         if isinstance(time, numbers.Number):
