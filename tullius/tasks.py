@@ -58,7 +58,7 @@ def insert_db_tasks(db_tasks):
         utils.mongo_retry(lambda: db.tasks.insert(db_task), True)
 
 def queue(tasks):
-    tasks = ensure_list(tasks)
+    tasks = utils.ensure_list(tasks)
     db_tasks = [task.for_db() for task in tasks]
     insert_db_tasks(db_tasks)
 
@@ -91,7 +91,7 @@ def process_tasks(min_priority, max_priority):
         else:
             status = 'done'
 
-        next_tasks = ensure_list(next_tasks)
+        next_tasks = utils.ensure_list(next_tasks)
 
         done_task(task, id, status, next_tasks)
 
