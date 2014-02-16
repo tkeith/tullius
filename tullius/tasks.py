@@ -77,7 +77,7 @@ def process_tasks(min_priority, max_priority):
             time.sleep(1)
             continue
 
-        task = task_from_db(db_task)
+        task = Task.from_db(db_task)
         id = db_task['_id']
         res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
         if res['n'] == 0:
@@ -107,7 +107,7 @@ def handle_dead_tasks():
         if db_task is None:
             return result
         result = True
-        task = task_from_db(db_task)
+        task = Task.from_db(db_task)
         id = db_task['_id']
         next_tasks = task.failed()
         done_task(task, id, 'failed', next_tasks)
