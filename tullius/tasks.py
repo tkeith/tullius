@@ -128,4 +128,5 @@ def daemon():
             def target():
                 process_tasks(min_priority, max_priority)
             proc = multiprocessing.Process(target=target)
+            proc.start()
     process_updates()
