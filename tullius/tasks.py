@@ -49,7 +49,7 @@ class ScheduledTask(object):
         self.time = time
 
     def for_db(self):
-        db_obj = task.for_db()
+        db_obj = self.task.for_db()
         db_obj.start_after = self.time
         return db_obj
 
