@@ -21,8 +21,16 @@ class Task(object):
     priority = 5
     timeout = 60
 
-    def __init__(self, input=None):
+    def __init__(self, input=None, priority=None, start_after=None, delay=None):
         self.input = input
+        if priority is not None:
+            self.priority = priority
+        if start_after is not None:
+            self.start_after = start_after
+        elif delay is not None:
+            self.start_after = datetime.now() + utils.ensure_timedelta(delay)
+        else:
+            self.start_after = datetime.now()
 
     def run(self):
         return None
@@ -32,26 +40,11 @@ class Task(object):
 
     def for_db(self):
         id = bson.ObjectId()
-        return {'_id': id, 'start_after': datetime.now(), 'status': 'new', 'priority': self.priority, 'pickle': pickle.dumps(self)}
+        return {'_id': id, 'start_after': self.start_after, 'status': 'queued', 'priority': self.priority, 'pickle': pickle.dumps(self)}
 
     @staticmethod
     def from_db(db_obj):
         return pickle.loads(db_obj['pickle'])
-
-class ScheduledTask(object):
-
-    def __init__(self, task, time):
-        if isinstance(time, numbers.Number):
-            time = timedelta(seconds=time)
-        if isinstance(time, timedelta):
-            time = datetime.now() + time
-        self.task = task
-        self.time = time
-
-    def for_db(self):
-        db_obj = self.task.for_db()
-        db_obj['start_after'] = self.time
-        return db_obj
 
 def insert_db_tasks(db_tasks):
     for db_task in db_tasks:
@@ -72,14 +65,14 @@ def done_task(task, id, status, next_tasks):
 
 def process_tasks(min_priority, max_priority):
     while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'new', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
+        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'queued', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
         if db_task is None:
             time.sleep(1)
             continue
 
         task = Task.from_db(db_task)
         id = db_task['_id']
-        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'new'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
+        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
         if res['n'] == 0:
             continue
 

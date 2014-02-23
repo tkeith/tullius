@@ -2,6 +2,7 @@ import multiprocessing
 import multiprocessing.queues
 import time
 import pymongo
+from datetime import timedelta
 
 class Timeout(Exception): pass
 
@@ -58,3 +59,8 @@ def ensure_list(x):
         if x is None:
             return []
         return [x]
+
+def ensure_timedelta(x):
+    if isinstance(x, timedelta):
+        return x
+    return timedelta(seconds=x)
