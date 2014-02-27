@@ -1,1 +1,1 @@
-from .tasks import queue, Task, ScheduledTask, daemon
+from .tasks import queue, Task, daemon
