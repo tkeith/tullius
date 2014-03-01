@@ -21,7 +21,7 @@ class Task(object):
     priority = 5
     timeout = 60
 
-    def __init__(self, input=None, priority=None, start_after=None, delay=None):
+    def __init__(self, priority=None, start_after=None, delay=None, **kwargs):
         self.input = input
         if priority is not None:
             self.priority = priority
@@ -32,11 +32,23 @@ class Task(object):
         else:
             self.start_after = datetime.now()
 
+        self.attrs_to_copy = ['priority']
+
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+            self.attrs_to_copy.append(k)
+
     def run(self):
         return None
 
     def failed(self):
         return None
+
+    def copy(self, **kwargs):
+        for attr in self.attrs_to_copy:
+            if attr not in kwargs:
+                kwargs[attr] = getattr(self, attr)
+        return type(self)(**kwargs)
 
     def for_db(self):
         id = bson.ObjectId()
