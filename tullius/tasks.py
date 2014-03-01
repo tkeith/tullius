@@ -82,23 +82,26 @@ def process_tasks(min_priority, max_priority):
             time.sleep(1)
             continue
 
-        task = Task.from_db(db_task)
-        id = db_task['_id']
-        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
-        if res['n'] == 0:
-            continue
+        def process_db_task():
+            task = Task.from_db(db_task)
+            id = db_task['_id']
+            res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
+            if res['n'] == 0:
+                return
 
-        try:
-            next_tasks = utils.timeout(task.run, task.timeout)
-        except Exception:
-            next_tasks = task.failed()
-            status = 'failed'
-        else:
-            status = 'done'
+            try:
+                next_tasks = utils.process(task.run, timeout=task.timeout)
+            except Exception:
+                next_tasks = task.failed()
+                status = 'failed'
+            else:
+                status = 'done'
 
-        next_tasks = utils.ensure_list(next_tasks)
+            next_tasks = utils.ensure_list(next_tasks)
 
-        done_task(task, id, status, next_tasks)
+            done_task(task, id, status, next_tasks)
+
+        utils.process(process_db_task)
 
 def process_updates():
     while True:
@@ -112,10 +115,14 @@ def handle_dead_tasks():
         if db_task is None:
             return result
         result = True
-        task = Task.from_db(db_task)
-        id = db_task['_id']
-        next_tasks = task.failed()
-        done_task(task, id, 'failed', next_tasks)
+
+        def process_db_task():
+            task = Task.from_db(db_task)
+            id = db_task['_id']
+            next_tasks = utils.ensure_list(task.failed())
+            done_task(task, id, 'failed', next_tasks)
+
+        utils.process(process_db_task)
 
 def handle_pending_tasks():
     result = False
