@@ -46,7 +46,7 @@ def retry(function, exception, interval=0, backoff=0, tries=None, timeout=None):
             time.sleep(interval)
             interval += backoff
 
-def mongo_retry(function, ignore_dup_key_error=False):
+def mongo_retry(function):
     try:
         return retry(function, pymongo.errors.AutoReconnect, backoff=1, timeout=60)
     except pymongo.errors.DuplicateKeyError:

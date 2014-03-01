@@ -60,7 +60,7 @@ class Task(object):
 
 def insert_db_tasks(db_tasks):
     for db_task in db_tasks:
-        utils.mongo_retry(lambda: db.tasks.insert(db_task), True)
+        utils.mongo_retry(lambda: db.tasks.insert(db_task))
 
 def queue(tasks):
     tasks = utils.ensure_list(tasks)
