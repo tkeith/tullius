@@ -2,3 +2,4 @@
 
 cd `dirname $0`
 python setup.py install
+rm -r build
