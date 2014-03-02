@@ -6,7 +6,7 @@ from datetime import timedelta
 
 class Timeout(Exception): pass
 
-def subprocess(func, timeout=None):
+def call_in_process(func, timeout=None):
     res_queue = multiprocessing.Queue()
 
     def target():

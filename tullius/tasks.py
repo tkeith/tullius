@@ -92,7 +92,7 @@ def process_tasks(min_priority, max_priority):
                 return
 
             try:
-                next_tasks = utils.subprocess(task.run, timeout=task.timeout)
+                next_tasks = utils.call_in_process(task.run, timeout=task.timeout)
             except Exception:
                 try:
                     next_tasks = task.failed()
@@ -107,7 +107,7 @@ def process_tasks(min_priority, max_priority):
 
             done_task(task, id, status, next_tasks)
 
-        utils.subprocess(process_db_task)
+        utils.call_in_process(process_db_task)
 
 def process_updates():
     while True:
@@ -128,7 +128,7 @@ def handle_dead_tasks():
             next_tasks = utils.ensure_list(task.failed())
             done_task(task, id, 'failed', next_tasks)
 
-        utils.subprocess(process_db_task)
+        utils.call_in_process(process_db_task)
 
 def handle_pending_tasks():
     result = False
