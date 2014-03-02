@@ -37,12 +37,16 @@ Configure Tullius by creating a `tullius_deps.py` module in your Python path. He
 
     import pymongo
 
-    db = pymongo.MongoClient(w='majority', j=True)['tullius']
-    task_processes = [(10, 0, 10), (3, 0, 0)]
+    # Connect to local MongoDB, using database name "tullius"
+    db = pymongo.MongoClient().tullius
+
+    # Run 10 processes handling tasks of priorities 0 through 10,
+    # and 5 processes handling tasks of only priority 0
+    task_processes = [(10, 0, 10), (5, 0, 0)]
 
 `db` is the pymongo connection to your MongoDB database.
 
-`task_processes` is the number of processes that should be allocated to processing tasks of different priorities. The above configuration allocates 10 processes to process tasks of priority 0 to 10, and 3 processes to process tasks of priority 0. This reserves 3 processes for processing real-time (priority 0) tasks.
+`task_processes` is the number of processes that should be allocated to processing tasks of different priorities. The above configuration allocates 10 processes to process tasks of priority 0 to 10, and 5 processes to process tasks of priority 0. This reserves 5 processes for processing real-time (priority 0) tasks.
 
 Now that Tullius is installed and configured, you can run the daemon, `tulliusd`. Try running it on the command line to make sure everything is working. If you see no output and it keeps running, it is set up properly and watching for tasks to process.
 
@@ -50,6 +54,6 @@ You can create an Upstart job to automatically run `tulliusd`. Just create a fil
 
     start on runlevel [2]
     stop on runlevel [016]
-    exec python -c "import tullius; tullius.daemon()"
+    exec tulliusd
 
 Now you can use `service tullius start` and `service tullius stop` to start and stop tullius.

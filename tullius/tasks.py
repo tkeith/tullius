@@ -8,6 +8,8 @@ import time
 import numbers
 import multiprocessing
 
+db.write_concern = {'w': 'majority', 'j': True}
+
 def ensure_indexes():
     db.tasks.ensure_index('priority')
     db.tasks.ensure_index('status')
