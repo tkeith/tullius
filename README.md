@@ -37,14 +37,14 @@ Configure Tullius by creating a `tullius_deps.py` module in your Python path. He
 
     import pymongo
 
-    # Connect to local MongoDB, using database name "tullius"
-    db = pymongo.MongoClient().tullius
+    # Connect to local MongoDB, with journaling enabled, using database name "tullius"
+    db = pymongo.MongoClient(j=True).tullius
 
     # Run 10 processes handling tasks of priorities 0 through 10,
     # and 5 processes handling tasks of only priority 0
     task_processes = [(10, 0, 10), (5, 0, 0)]
 
-`db` is the pymongo connection to your MongoDB database.
+`db` is the pymongo connection to your MongoDB database. Make sure to set the appropriate write concern options -- if you are using a replica set, you should probably set `w='majority'`.
 
 `task_processes` is the number of processes that should be allocated to processing tasks of different priorities. The above configuration allocates 10 processes to process tasks of priority 0 to 10, and 5 processes to process tasks of priority 0. This reserves 5 processes for processing real-time (priority 0) tasks.
 
