@@ -18,31 +18,28 @@ utils.mongo_retry(ensure_indexes)
 
 class Task(object):
 
-    priority = 5
-    timeout = 60
+    required_attrs = ['priority', 'timeout', 'start_after', 'run', 'failed']
 
-    def __init__(self, priority=None, start_after=None, delay=None, **kwargs):
+    priority = 5
+
+    def __init__(self, start_after=None, delay=None, **kwargs):
         self.input = input
-        if priority is not None:
-            self.priority = priority
         if start_after is not None:
+            assert isinstance(start_after, datetime)
             self.start_after = start_after
         elif delay is not None:
             self.start_after = datetime.now() + utils.ensure_timedelta(delay)
         else:
             self.start_after = datetime.now()
 
-        self.attrs_to_copy = ['priority']
+        self.attrs_to_copy = list()
 
         for k, v in kwargs.items():
             setattr(self, k, v)
             self.attrs_to_copy.append(k)
 
-    def run(self):
-        return None
-
-    def failed(self):
-        return None
+        for attr in self.required_attrs:
+            assert hasattr(self, attr)
 
     def copy(self, **kwargs):
         for attr in self.attrs_to_copy:
