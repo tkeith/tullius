@@ -39,7 +39,8 @@ class Task(object):
             self.attrs_to_copy.append(k)
 
         for attr in self.required_attrs:
-            assert hasattr(self, attr)
+            if not hasattr(self, attr):
+                raise Exception('Missing attribute: {}'.format(attr))
 
     def copy(self, **kwargs):
         for attr in self.attrs_to_copy:

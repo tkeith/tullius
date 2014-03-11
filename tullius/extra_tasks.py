@@ -12,8 +12,14 @@ class RetryTask(tasks.Task):
 
     backoff = timedelta(0)
 
+    def __init__(self, next_delay=None, **kwargs):
+        super(RetryTask, self).__init__(**kwargs)
+        if next_delay is None:
+            next_delay = self.interval
+        self.next_delay = next_delay
+
     def failed(self):
         if self.tries <= 1:
             return self.retry_failed()
 
-        return self.copy(tries=self.tries - 1, delay=self.interval, interval=self.interval + self.backoff)
+        return self.copy(tries=self.tries - 1, delay=self.next_delay, next_delay=self.next_delay + self.backoff)
