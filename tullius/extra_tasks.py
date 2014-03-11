@@ -12,11 +12,13 @@ class RetryTask(tasks.Task):
 
     backoff = timedelta(0)
 
-    def __init__(self, next_delay=None, **kwargs):
-        super(RetryTask, self).__init__(**kwargs)
+    def __init__(self, tries=None, next_delay=None, **kwargs):
+        if tries is not None:
+            self.tries = tries
         if next_delay is None:
             next_delay = self.interval
         self.next_delay = next_delay
+        super(RetryTask, self).__init__(**kwargs)
 
     def failed(self):
         if self.tries <= 1:
