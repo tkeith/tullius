@@ -28,7 +28,7 @@ class Task(object):
             assert isinstance(start_after, datetime)
             self.start_after = start_after
         elif delay is not None:
-            self.start_after = datetime.now() + utils.ensure_timedelta(delay)
+            self.start_after = datetime.now() + delay
         else:
             self.start_after = datetime.now()
 
@@ -83,12 +83,12 @@ def process_tasks(min_priority, max_priority):
         def process_db_task():
             task = Task.from_db(db_task)
             id = db_task['_id']
-            res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=task.timeout)}}))
+            res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + task.timeout}}))
             if res['n'] == 0:
                 return
 
             try:
-                next_tasks = utils.call_in_process(task.run, timeout=task.timeout)
+                next_tasks = utils.call_in_process(task.run, timeout=task.timeout.total_seconds())
             except Exception:
                 try:
                     next_tasks = task.failed()

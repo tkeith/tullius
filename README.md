@@ -10,7 +10,7 @@ Here is an example task that will count up to a number with one-second intervals
 
     class ExampleTask(tullius.Task):
 
-        timeout = 5
+        timeout = timedelta(seconds=5)
 
         def run(self):
             for i in range(self.count_to):
@@ -25,7 +25,7 @@ To count to 3, you can execute:
     task = ExampleTask(count_to=3)
     tullius.queue(task)
 
-Notice that the timeout is 5 (seconds). If we try to count to 10, our task will begin counting and get to 5, at which point 5 seconds will have elapsed. Then, the task processor will terminate the task, and it will be considered failed. A task processor will notice the failure, and call `task.failed()` to find out what to do. In this case, it will queue a copy of the task, with count_to reduced by one. This new task will try to count to 9, which will also fail, and queue a task counting to 8. These tasks will continue to fail until one tries to count to 4, which will complete in 5 seconds, and will be considered done.
+Notice that the timeout is 5 seconds. If we try to count to 10, our task will begin counting and get to 5, at which point 5 seconds will have elapsed. Then, the task processor will terminate the task, and it will be considered failed. A task processor will notice the failure, and call `task.failed()` to find out what to do. In this case, it will queue a copy of the task, with count_to reduced by one. This new task will try to count to 9, which will also fail, and queue a task counting to 8. These tasks will continue to fail until one tries to count to 4, which will complete in 5 seconds, and will be considered done.
 
 ## Setup
 
