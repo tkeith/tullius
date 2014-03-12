@@ -1,5 +1,5 @@
 import bson
-from tullius_deps import db, task_processes
+from tullius_deps import make_db, task_processes
 import pickle
 import pymongo
 from datetime import datetime, timedelta
@@ -8,13 +8,16 @@ import time
 import numbers
 import multiprocessing
 
-def ensure_indexes():
-    db.tasks.ensure_index('priority')
-    db.tasks.ensure_index('status')
-    db.tasks.ensure_index('timeout_time')
-    db.tasks.ensure_index('start_after')
+_db = None
 
-utils.mongo_retry(ensure_indexes)
+def get_db():
+    global _db
+    if _db is None:
+        _db = make_db()
+    return _db
+
+def ensure_indexes():
+    utils.mongo_retry(lambda: get_db().tasks.ensure_index([('status', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
 
 class Task(object):
 
@@ -42,6 +45,10 @@ class Task(object):
             if not hasattr(self, attr):
                 raise Exception('Missing attribute: {}'.format(attr))
 
+        assert isinstance(self.timeout, timedelta)
+        assert isinstance(self.priority, numbers.Real)
+        assert isinstance(self.start_after, datetime)
+
     def copy(self, **kwargs):
         for attr in self.attrs_to_copy:
             if attr not in kwargs:
@@ -50,15 +57,23 @@ class Task(object):
 
     def for_db(self):
         id = bson.ObjectId()
-        return {'_id': id, 'start_after': self.start_after, 'status': 'queued', 'priority': self.priority, 'pickle': pickle.dumps(self)}
+        return {'_id': id, 'start_after': self.start_after, 'status': 'queued', 'priority': self.priority, 'timeout': self.timeout.total_seconds(), 'pickle': pickle.dumps(self)}
 
     @staticmethod
     def from_db(db_obj):
         return pickle.loads(db_obj['pickle'])
 
+def task_failed(task):
+    try:
+        next_tasks = utils.ensure_list(task.failed())
+    except Exception:
+        # Failure logic raised an exception, just ignore
+        next_tasks = []
+    return next_tasks
+
 def insert_db_tasks(db_tasks):
     for db_task in db_tasks:
-        utils.mongo_retry(lambda: db.tasks.insert(db_task))
+        utils.mongo_retry(lambda: get_db().tasks.insert(db_task))
 
 def queue(tasks):
     tasks = utils.ensure_list(tasks)
@@ -71,12 +86,12 @@ def done_task(task, id, status, next_tasks):
     else:
         next_tasks_for_db = [task.for_db() for task in next_tasks]
         update = {'$set': {'status': 'next_tasks_pending', 'next_status': status, 'next_tasks': next_tasks_for_db}}
-    utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'running'}, update))
+    utils.mongo_retry(lambda: get_db().tasks.update({'_id': id, 'status': 'running'}, update))
 
 def process_task(task_processes_avail):
     for sem, min_priority, max_priority in task_processes_avail:
-        if sem.acquire(False):
-            db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'queued', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
+        if sem.acquire(block=False):
+            db_task = utils.mongo_retry(lambda: get_db().tasks.find_one({'status': 'queued', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
             if db_task is None:
                 sem.release()
             else:
@@ -84,26 +99,24 @@ def process_task(task_processes_avail):
     else:
         return False
 
+    id = db_task['_id']
+
+    res = utils.mongo_retry(lambda: get_db().tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + timedelta(seconds=db_task['timeout'])}}))
+    if res['n'] == 0:
+        # Another instance got to this task before us
+        sem.release()
+        return True
+
     def process_db_task():
         task = Task.from_db(db_task)
-        id = db_task['_id']
-        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + task.timeout}}))
-        if res['n'] == 0:
-            return
 
         try:
-            next_tasks = utils.call_in_process(task.run, timeout=task.timeout.total_seconds())
+            next_tasks = utils.ensure_list(utils.call_in_process(task.run, timeout=task.timeout.total_seconds()))
         except Exception:
-            try:
-                next_tasks = task.failed()
-            except Exception:
-                # Failure logic raised an exception, just ignore
-                next_tasks = []
+            next_tasks = task_failed(task)
             status = 'failed'
         else:
             status = 'done'
-
-        next_tasks = utils.ensure_list(next_tasks)
 
         done_task(task, id, status, next_tasks)
 
@@ -114,7 +127,7 @@ def process_task(task_processes_avail):
     return True
 
 def handle_dead_task():
-    db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'running', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
+    db_task = utils.mongo_retry(lambda: get_db().tasks.find_one({'status': 'running', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
     if db_task is None:
         return False
 
@@ -123,7 +136,7 @@ def handle_dead_task():
     def process_db_task():
         task = Task.from_db(db_task)
         id = db_task['_id']
-        next_tasks = utils.ensure_list(task.failed())
+        next_tasks = task_failed(task)
         done_task(task, id, 'failed', next_tasks)
 
     utils.call_in_process(process_db_task)
@@ -131,16 +144,17 @@ def handle_dead_task():
     return True
 
 def handle_pending_task():
-    db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'next_tasks_pending'}))
+    db_task = utils.mongo_retry(lambda: get_db().tasks.find_one({'status': 'next_tasks_pending'}))
     if db_task is None:
         return False
 
     insert_db_tasks(db_task['next_tasks'])
-    utils.mongo_retry(lambda: db.tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}}))
+    utils.mongo_retry(lambda: get_db().tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}}))
 
     return True
 
 def daemon():
+    ensure_indexes()
     task_processes_avail = [(multiprocessing.Semaphore(num), min_priority, max_priority) for (num, min_priority, max_priority) in task_processes]
     while True:
         if not (handle_dead_task() or handle_pending_task() or process_task(task_processes_avail)):
