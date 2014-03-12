@@ -73,74 +73,75 @@ def done_task(task, id, status, next_tasks):
         update = {'$set': {'status': 'next_tasks_pending', 'next_status': status, 'next_tasks': next_tasks_for_db}}
     utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'running'}, update))
 
-def process_tasks(min_priority, max_priority):
-    while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'queued', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
-        if db_task is None:
-            time.sleep(1)
-            continue
-
-        def process_db_task():
-            task = Task.from_db(db_task)
-            id = db_task['_id']
-            res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + task.timeout}}))
-            if res['n'] == 0:
-                return
-
-            try:
-                next_tasks = utils.call_in_process(task.run, timeout=task.timeout.total_seconds())
-            except Exception:
-                try:
-                    next_tasks = task.failed()
-                except Exception:
-                    # Failure logic raised an exception, just ignore
-                    next_tasks = []
-                status = 'failed'
+def process_task(task_processes_avail):
+    for sem, min_priority, max_priority in task_processes_avail:
+        if sem.acquire(False):
+            db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'queued', 'start_after': {'$lte': datetime.now()}, 'priority': {'$gte': min_priority, '$lte': max_priority}}, sort=[('priority', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
+            if db_task is None:
+                sem.release()
             else:
-                status = 'done'
+                break
+    else:
+        return False
 
-            next_tasks = utils.ensure_list(next_tasks)
+    def process_db_task():
+        task = Task.from_db(db_task)
+        id = db_task['_id']
+        res = utils.mongo_retry(lambda: db.tasks.update({'_id': id, 'status': 'queued'}, {'$set': {'status': 'running', 'timeout_time': datetime.now() + task.timeout}}))
+        if res['n'] == 0:
+            return
 
-            done_task(task, id, status, next_tasks)
+        try:
+            next_tasks = utils.call_in_process(task.run, timeout=task.timeout.total_seconds())
+        except Exception:
+            try:
+                next_tasks = task.failed()
+            except Exception:
+                # Failure logic raised an exception, just ignore
+                next_tasks = []
+            status = 'failed'
+        else:
+            status = 'done'
 
-        utils.call_in_process(process_db_task)
+        next_tasks = utils.ensure_list(next_tasks)
 
-def process_updates():
-    while True:
-        if not (handle_dead_tasks() or handle_pending_tasks()):
-            time.sleep(1)
+        done_task(task, id, status, next_tasks)
 
-def handle_dead_tasks():
-    result = False
-    while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'running', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
-        if db_task is None:
-            return result
-        result = True
+        sem.release()
 
-        def process_db_task():
-            task = Task.from_db(db_task)
-            id = db_task['_id']
-            next_tasks = utils.ensure_list(task.failed())
-            done_task(task, id, 'failed', next_tasks)
+    multiprocessing.Process(target=process_db_task).start()
 
-        utils.call_in_process(process_db_task)
+    return True
 
-def handle_pending_tasks():
-    result = False
-    while True:
-        db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'next_tasks_pending'}))
-        if db_task is None:
-            return result
-        result = True
-        insert_db_tasks(db_task['next_tasks'])
-        utils.mongo_retry(lambda: db.tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}}))
+def handle_dead_task():
+    db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'running', 'timeout_time': {'$lte': datetime.now() - timedelta(seconds=60)}}))
+    if db_task is None:
+        return False
+
+    # Unpickle Task in new process so that it reloads without restarting Tullius
+
+    def process_db_task():
+        task = Task.from_db(db_task)
+        id = db_task['_id']
+        next_tasks = utils.ensure_list(task.failed())
+        done_task(task, id, 'failed', next_tasks)
+
+    utils.call_in_process(process_db_task)
+
+    return True
+
+def handle_pending_task():
+    db_task = utils.mongo_retry(lambda: db.tasks.find_one({'status': 'next_tasks_pending'}))
+    if db_task is None:
+        return False
+
+    insert_db_tasks(db_task['next_tasks'])
+    utils.mongo_retry(lambda: db.tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}}))
+
+    return True
 
 def daemon():
-    for num, min_priority, max_priority in task_processes:
-        for i in range(num):
-            def target():
-                process_tasks(min_priority, max_priority)
-            proc = multiprocessing.Process(target=target)
-            proc.start()
-    process_updates()
+    task_processes_avail = [(multiprocessing.Semaphore(num), min_priority, max_priority) for (num, min_priority, max_priority) in task_processes]
+    while True:
+        if not (handle_dead_task() or handle_pending_task() or process_task(task_processes_avail)):
+            time.sleep(0.25)
