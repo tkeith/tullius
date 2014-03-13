@@ -7,6 +7,7 @@ from . import utils
 import time
 import numbers
 import multiprocessing
+import threading
 
 _db = None
 
@@ -122,7 +123,13 @@ def process_task(task_processes_avail):
 
         sem.release()
 
-    multiprocessing.Process(target=process_db_task).start()
+    proc = multiprocessing.Process(target=process_db_task)
+    proc.start()
+
+    def join_process():
+        proc.join()
+
+    threading.Thread(target=join_process).start()
 
     return True
 
