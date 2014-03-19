@@ -22,5 +22,5 @@ def remove_next_tasks_from_completed_tasks():
         pass
 
     db = utils.get_db()
-    docs_updated = db.tasks.update({'next_tasks': {'$exists': True}}, {'$unset': {'next_tasks': '', 'next_status': ''}}, multi=True)['n']
+    docs_updated = db.tasks.update({'$or': [{'next_tasks': {'$exists': True}}, {'next_status': {'$exists': True}}]}, {'$unset': {'next_tasks': '', 'next_status': ''}}, multi=True)['n']
     print 'Documents updated: {}'.format(docs_updated)
