@@ -150,7 +150,7 @@ def handle_pending_task():
         return False
 
     insert_db_tasks(db_task['next_tasks'])
-    utils.mongo_retry(lambda: get_db().tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}, '$unset': {'next_tasks': ''}}))
+    utils.mongo_retry(lambda: get_db().tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}, '$unset': {'next_tasks': '', 'next_status': ''}}))
 
     return True
 
