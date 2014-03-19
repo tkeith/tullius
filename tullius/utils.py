@@ -2,6 +2,7 @@ import multiprocessing
 import multiprocessing.queues
 import time
 import pymongo
+import tullius_deps as deps
 
 class Timeout(Exception): pass
 
@@ -58,3 +59,14 @@ def ensure_list(x):
         if x is None:
             return []
         return [x]
+
+_db = None
+
+def get_db():
+    global _db
+    if _db is None:
+        _db = deps.make_db()
+    return _db
+
+def qualified_name(cls):
+    return cls.__module__ + '.' + cls.__name__

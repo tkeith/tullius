@@ -1,24 +1,18 @@
 import bson
-from tullius_deps import make_db, task_processes
+from tullius_deps import task_processes
 import pickle
 import pymongo
 from datetime import datetime, timedelta
 from . import utils
+from utils import get_db
 import time
 import numbers
 import multiprocessing
 import threading
 
-_db = None
-
-def get_db():
-    global _db
-    if _db is None:
-        _db = make_db()
-    return _db
-
 def ensure_indexes():
     utils.mongo_retry(lambda: get_db().tasks.ensure_index([('status', pymongo.ASCENDING), ('start_after', pymongo.ASCENDING)]))
+    utils.mongo_retry(lambda: get_db().tasks.ensure_index([('class', pymongo.ASCENDING), ('status', pymongo.ASCENDING)]))
 
 class Task(object):
 
@@ -58,7 +52,7 @@ class Task(object):
 
     def for_db(self):
         id = bson.ObjectId()
-        return {'_id': id, 'start_after': self.start_after, 'status': 'queued', 'priority': self.priority, 'timeout': self.timeout.total_seconds(), 'pickle': pickle.dumps(self)}
+        return {'_id': id, 'start_after': self.start_after, 'status': 'queued', 'priority': self.priority, 'timeout': self.timeout.total_seconds(), 'class': utils.qualified_name(type(self)), 'pickle': pickle.dumps(self)}
 
     @staticmethod
     def from_db(db_obj):
@@ -156,7 +150,7 @@ def handle_pending_task():
         return False
 
     insert_db_tasks(db_task['next_tasks'])
-    utils.mongo_retry(lambda: get_db().tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}}))
+    utils.mongo_retry(lambda: get_db().tasks.update({'_id': db_task['_id']}, {'$set': {'status': db_task['next_status']}, '$unset': {'next_tasks': ''}}))
 
     return True
 
