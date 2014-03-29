@@ -159,4 +159,4 @@ def daemon():
     task_processes_avail = [(multiprocessing.Semaphore(num), min_priority, max_priority) for (num, min_priority, max_priority) in task_processes]
     while True:
         if not (handle_dead_task() or handle_pending_task() or process_task(task_processes_avail)):
-            time.sleep(0.25)
+            time.sleep(0.1)
